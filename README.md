@@ -74,7 +74,7 @@ Her API çağrısının ardına `time.sleep(0.4)` koydum. Yani saniyede 2–3 is
 
 **Neden `all-MiniLM-L6-v2`?**
 
-Açıkçası bu seçimde benim için en kritik şey lokalde, ekstra maliyet olmadan çalışmasıydı. Model hafif, CPU'da bile yavaşlamıyor ve biyomedikal özetlerde semantik olarak yeterince iyi iş çıkarıyor. BiomedBERT gibi domain-spesifik bir model daha doğru sonuçlar verebilir — bunu biliyorum — ama kurulum karmaşıklığı ve ağırlığı bu proje için fazlaydı. Bilinçli bir trade-off.
+Lokalde çalışıyor, ekstra API maliyeti yok, CPU'da bile hızlı. Biyomedikal özetlerdeki semantik benzerliği yakalamak için yeterince güçlü ve sentence-transformers ile doğrudan ChromaDB'ye entegre oluyor. Kurulum tek satır, ek bağımlılık yok — bu projede tam ihtiyaç duyduğum şey buydu.
 
 **LLM fenotip ile varyantı nasıl ayırt ediyor?**
 
@@ -124,7 +124,6 @@ Sources consulted: PMID: 38618971, PMID: 37186453, DOI: 10.1101/...
 
 ---
 
-> Tıp alanında "bilmiyorum" her zaman uydurulmuş bir varyanttan daha iyi bir cevaptır. Sistem bu anlayış üzerine kuruldu.
 
 
 
