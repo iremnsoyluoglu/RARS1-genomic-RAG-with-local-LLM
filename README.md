@@ -1,65 +1,43 @@
-# RARS1 Genomic-RAG System
+# RARS1 Genomic-RAG
 
-Bu projede RARS1 geni için PubMed + bioRxiv'den güncel literatürü çekip ChromaDB üzerinde vektör olarak saklayan ve **lokal bir LLM** (Ollama üzerinden, ör. `phi3:mini` / `gemma3:4b` / `llama3`) ile RAG tabanlı cevap üreten bir sistem kurdum.
+RARS1 geni üzerine yayımlanan literatürü dinamik olarak çekip, lokal bir LLM ile soru-cevap yapabilen bir RAG sistemi. Statik bir PDF'e ya da önceden hazırlanmış bir veri setine dayanmıyor — her çalıştırmada PubMed ve bioRxiv'den güncel verileri alıyor.
 
-PubMed tarafında `retmax=50` kullanıyorum (en fazla 50 abstract), bioRxiv tarafında ise en fazla 20 pre-print özet alıyorum. Toplamda yaklaşık 70 abstract işleniyor (o anda bulunan sonuç sayısına göre biraz daha az olabilir).
-
-Amaç, RARS1 ile ilişkili **fenotipleri**, **hastalıkları** ve **spesifik varyantları** kaynaklara (PMID / DOI) referans vererek özetlemek.
+Odak noktası: fenotip, hastalık ve genetik varyantları birbirine karıştırmadan, her iddiayı bir PMID ya da DOI'ye bağlayarak sunmak.
 
 ---
 
-## Deliverables
+## Dosyalar
 
-| Dosya | Görev |
-|-------|-------|
-| `main.py` | Sorgu motorunu çalıştıran giriş noktası |
-| `ingest.py` | PubMed + bioRxiv API çağrılarını yapan script |
-| `requirements.txt` | Tüm bağımlılıklar |
-| `evaluate.py` | RAG pipeline'ını otomatik test eden script (trick question dahil 3 soru, sonuçlar `eval_results.json`'a yazılır) |
-| `.env.example` | API key şablonu |
-| `.gitignore` | `.env`, `chroma_db/`, geçici dosyalar hariç tutulur |
-
----
-
-## Gereksinimler
-
-| Gereksinim | Zorunlu | Notlar |
-|------------|---------|--------|
-| Python 3.10+ | ✅ | `python --version` ile kontrol et |
-| Ollama | ✅ | [ollama.com/download](https://ollama.com/download) |
-| `ENTREZ_EMAIL` | ✅ | Herhangi bir geçerli e-posta |
-| `NCBI_API_KEY` | ⚡ Opsiyonel | Rate limit'i 3 → 10 req/sn'ye çıkarır |
-| GPU | ❌ | CPU'da da çalışır |
+| Dosya | Ne yapıyor |
+|-------|-----------|
+| `main.py` | Soru alıp ChromaDB'den ilgili chunk'ları çeken, sonra Ollama'ya gönderen ana döngü |
+| `ingest.py` | PubMed + bioRxiv'den veri çekip ChromaDB'ye yazan script |
+| `requirements.txt` | Bağımlılıklar |
+| `evaluate.py` | 3 test sorusu çalıştırıp `eval_results.json` üreten script |
+| `.env.example` | Hangi değişkenlerin gerektiğini gösteren şablon |
+| `.gitignore` | `.env`, `chroma_db/` ve geçici dosyalar hariç |
 
 ---
 
 ## Kurulum
 
 ```bash
-# 1. Bağımlılıkları kur
 pip install -r requirements.txt
-
-# 2. .env dosyasını oluştur
 copy .env.example .env
 ```
 
-`.env` dosyanı aç ve şu değerleri doldur:
+`.env` dosyasını aç, şunları doldur:
 
 ```
 ENTREZ_EMAIL=your@email.com
-NCBI_API_KEY=optional_but_recommended
+NCBI_API_KEY=          # opsiyonel ama rate limit için önerilir
 OLLAMA_MODEL=phi3:mini
 ```
 
+Ollama kurulu değilse → [ollama.com/download](https://ollama.com/download)
+
 ```bash
-# 3. Ollama'yı kur (henüz kurulu değilse): https://ollama.com/download
-
-# 4. Modeli indir ve test et
-ollama pull phi3:mini
-
-# (opsiyonel alternatifler)
-ollama pull gemma3:4b
-ollama pull llama3
+ollama pull phi3:mini   # ya da gemma3:4b / llama3
 ```
 
 ---
@@ -67,14 +45,9 @@ ollama pull llama3
 ## Çalıştırma
 
 ```bash
-# Adım 1 — Veri tabanını hazırla (bir kez çalıştır)
-python ingest.py
-
-# Adım 2 — RAG chat'i başlat
-python main.py
-
-# Adım 3 — Otomatik değerlendirme (opsiyonel)
-python evaluate.py
+python ingest.py     # önce bunu — veri tabanını hazırlar
+python main.py       # sonra bunu — chat başlar
+python evaluate.py   # opsiyonel — eval_results.json üretir
 ```
 
 ---
@@ -82,110 +55,76 @@ python evaluate.py
 ## Mimari
 
 ```
-PubMed (Entrez) + bioRxiv  -->  ingest.py  -->  ChromaDB (rars1_genomics)
-                                                        |
-                                                        v
-                                                   main.py (RAG)
-                                                        |
-                                            local LLM via Ollama API
-                                                        |
-                                           validate_response (guardrail)
+PubMed (Entrez) + bioRxiv  →  ingest.py  →  ChromaDB
+                                                 ↓
+                                            main.py (RAG)
+                                                 ↓
+                                       Ollama (lokal LLM)
+                                                 ↓
+                                      validate_response()
 ```
 
 ---
 
-## Veri Akışı
+## Teknik Kararlar
 
-### 1. Ingestion (`ingest.py`)
-- **PubMed**: `RARS1[Gene Name] OR RARS1 leukodystrophy OR RARS1 aminoacyl tRNA synthetase` sorgusuyla en fazla 50 abstract çekilir
-- **bioRxiv**: RARS1 endpoint'inden en fazla 20 pre-print özet alınır
-- **Chunking**: Varyant isimleri korunarak 2 cümlelik parçalara bölünür (detay aşağıda)
-- **Embedding**: `all-MiniLM-L6-v2` ile vektörleştirilip ChromaDB'ye yazılır
-- Ham veriler `raw_abstracts.json` olarak da kaydedilir
+**PubMed rate limitlerini nasıl yönettim?**
 
-### 2. Chat (`main.py`)
-- Kullanıcı sorusu → ChromaDB'den en yakın **6 chunk** (top_k = 6)
-- Chunk'lar + soru → Ollama üzerinden lokal LLM'e gönderilir
-- Konuşma geçmişi saklanır; `clear` komutuyla sıfırlanır
-- ChromaDB'den hiç sonuç dönmezse LLM'e gidilmez, kullanıcıya doğrudan şu mesaj verilir:
+Her API çağrısının ardına `time.sleep(0.4)` koydum. Yani saniyede 2–3 istek civarında kalıyorum. NCBI API key varsa limit zaten 10 req/sn'ye çıkıyor ama beklemeyi kaldırmadım — key olmadan da sorunsuz çalışsın istedim. Gereksiz bir risk almak anlamsız geldi.
 
-  ```
-  I couldn't find any relevant abstracts for that query.
-  ```
+**Neden `all-MiniLM-L6-v2`?**
 
-### 3. Evaluation (`evaluate.py`)
-Üç sabit soru çalıştırılır, sonuçlar `eval_results.json`'a yazılır:
+Açıkçası bu seçimde benim için en kritik şey lokalde, ekstra maliyet olmadan çalışmasıydı. Model hafif, CPU'da bile yavaşlamıyor ve biyomedikal özetlerde semantik olarak yeterince iyi iş çıkarıyor. BiomedBERT gibi domain-spesifik bir model daha doğru sonuçlar verebilir — bunu biliyorum — ama kurulum karmaşıklığı ve ağırlığı bu proje için fazlaydı. Bilinçli bir trade-off.
 
-| # | Soru | Tür | Geçme Kriteri |
-|---|------|-----|---------------|
-| 1 | "What variants in RARS1 cause leukodystrophy?" | Gerçek | Cevap PMID içermeli |
-| 2 | "Is RARS1 associated with cystic fibrosis?" | **Trick** | "no evidence" / "not found" içermeli |
-| 3 | "What neurological symptoms are seen in RARS1 patients?" | Fenotip | Fenotip bölümü + PMID içermeli |
+**LLM fenotip ile varyantı nasıl ayırt ediyor?**
+
+İki ayrı katman var. İlki prompt: modelden fenotipleri ve varyantları ayrı başlıklar altında, ayrı mantıkla yazması isteniyor. İkincisi kod tarafında: `validate_response` fonksiyonu cevaptaki varyant ifadelerini (`c.5A>G`, `p.Met1Thr` gibi) regex ile çıkarıp bunların gerçekten kaynak chunk'larda geçip geçmediğini kontrol ediyor. Sadece prompt'a güvenmek yetmez — bu yüzden çıktı sonrası doğrulama da var.
 
 ---
 
-## Retrieval Ayarları
+## Retrieval
 
-ChromaDB'den her soru için en fazla **6 chunk** çekiyorum (`top_k = 6`). Bu, PDF'teki "5–6 chunk" önerisiyle uyumludur ve lokal LLM'nin context window'unu aşmadan yeterli bağlam sağlar.
+Her soruda ChromaDB'den en fazla **6 chunk** çekiyorum. Lokal LLM'nin context window'unu zorlamadan anlamlı bağlam sağlamak için bu sayı makul bir denge noktası.
 
----
+ChromaDB'den hiç sonuç gelmezse LLM'e istek atmıyorum bile:
 
-## Tasarım Kararları
+```
+I couldn't find any relevant abstracts for that query.
+```
 
-### 1. PubMed API Rate Limitlerini Nasıl Yönettim?
-
-Biopython'un Entrez arayüzünü kullanıyorum. Her `esearch` ve `efetch` çağrısından sonra `time.sleep(0.4)` koyuyorum — bu, saniyede ~2–3 istek seviyesinde tutuyor. `NCBI_API_KEY` tanımlandığında limit 10 req/sn'ye çıkıyor, ama güvenli tarafta kalmak için beklemeyi her durumda bırakıyorum.
-
-### 2. Neden `all-MiniLM-L6-v2` Embedding Modeli?
-
-Amacım pratik, hızlı ve lokal çalışabilen bir çözüm kurmaktı. Bu model hafif, CPU'da bile makul hızda çalışıyor ve ekstra API maliyeti gerektirmiyor. Biyomedikal özetler için semantik olarak yeterli performans veriyor. Domain-spesifik modeller (örn. BiomedBERT) bazı durumlarda daha iyi sonuç verebilir, ancak bu projede **hız, sadelik ve kurulum kolaylığı** daha öncelikliydi — bilinçli bir trade-off.
-
-### 3. LLM Fenotip ile Varyantı Nasıl Ayırt Ediyor?
-
-İki katmanlı yaklaşım kullandım:
-
-**Prompt seviyesinde:** Sistem mesajında modelden fenotipleri (klinik gözlemler) ve varyantları (moleküler mutasyonlar) ayrı bölümler halinde ifade etmesi isteniyor.
-
-**Çıktı sonrası guardrail:** `validate_response` fonksiyonu regex ile cevaptaki varyant ifadelerini (`c.5A>G`, `p.Met1Thr` vb.) çıkarıp bunların gerçekten retrieve edilen chunk'larda geçip geçmediğini kontrol ediyor. Kaynakta olmayan varyantlar işaretleniyor.
-
-Yani sadece prompt'a güvenmiyorum, teknik bir doğrulama katmanı da var.
+Boş context üzerinden cevap üretmek en kötü senaryo olurdu.
 
 ---
 
-## Chunking Stratejisi
+## Evaluate
 
-1. Varyant isimleri (`c.5A>G`, `p.Met1Thr` vb.) regex ile tespit edilip `__VAR_i__` placeholder'ına çevrilir
-2. Abstract cümlelere ayrılıp 2 cümlelik bloklar halinde chunk'lanır
-3. Placeholder'lar orijinal varyant isimleriyle geri değiştirilir
-4. Her chunk `pmid`, `doi`, `title`, `source`, `chunk_index` metadata'larıyla ChromaDB'ye yazılır
+`evaluate.py` şu üç soruyu otomatik çalıştırır:
 
-Bu sayede hiçbir varyant ismi chunk sınırında bölünmez.
+| Soru | Tür | Beklenen |
+|------|-----|----------|
+| "What variants in RARS1 cause leukodystrophy?" | Gerçek | PMID içeren cevap |
+| "Is RARS1 associated with cystic fibrosis?" | **Trick** | "no evidence" demeli |
+| "What neurological symptoms are seen in RARS1 patients?" | Fenotip | Fenotip bölümü + PMID |
 
----
-
-## Hata Yönetimi
-
-- **bioRxiv**: `try/except` ile sarılı — hata olursa boş liste dönüp ingest devam eder
-- **Ollama**: `requests.RequestException` ile sarılı — hata olursa `"Ollama API error: ..."` mesajı basılır, sistem çökmez
-- **Boş context**: ChromaDB'den sonuç dönmezse LLM'e hiç gidilmez, uydurma cevap riski sıfırlanır
+Sonuçlar `eval_results.json`'a yazılır, konsolda ✓/✗ özeti görünür.
 
 ---
 
 ## Çıktı Formatı
 
-Cümle içinde doğal atıf:
+Cümle içinde:
 ```
-... was associated with hypomyelinating leukodystrophy [PMID: 37186453].
+...associated with hypomyelinating leukodystrophy [PMID: 37186453].
 ```
 
-Cevap sonunda toplu kaynak listesi:
+Cevap sonunda:
 ```
 Sources consulted: PMID: 38618971, PMID: 37186453, DOI: 10.1101/...
 ```
 
 ---
 
-
+> Tıp alanında "bilmiyorum" her zaman uydurulmuş bir varyanttan daha iyi bir cevaptır. Sistem bu anlayış üzerine kuruldu.
 
 
 
