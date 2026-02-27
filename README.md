@@ -31,23 +31,17 @@ python main.py      # RAG chat (lokal LLM ile)
 python evaluate.py  # eval_results.json üretir, trick question dahil
 ```
 
-## PubMed API rate limit'i nasıl yönettim?
+## 1. PubMed API rate limitlerini nasıl yönettim?
+PubMed’e istek atarken Biopython’un Entrez arayüzünü kullanıyorum. Her esearch ve efetch çağrısından sonra küçük bir bekleme koyuyorum (time.sleep(0.4) gibi). Böylece saniyede yaklaşık 2–3 istek seviyesinde kalıyorum. NCBI API key tanımlandığında limit aslında daha yukarı çıkıyor (yaklaşık 10 req/sn), ama ben yine de aynı beklemeyi bırakıyorum. Böylece hem API key’siz hem de key’li kullanımda güvenli tarafta kalmış oluyorum ve rate limit’e takılma riskini minimize ediyorum.
 
-Ingestion sırasında her Entrez çağrısından sonra `time.sleep(0.4)` kullanıyorum.  
-NCBI'nin varsayılan limiti ~3 req/sn, `NCBI_API_KEY` sağlandığında bu ~10 req/sn'ye çıkıyor.  
-Böylece script hem anonim hem de API key'li kullanımda limitleri makul bir tamponla koruyor.
+## 2. Neden all-MiniLM-L6-v2 embedding modelini seçtim?
+Burada amacım pratik, hızlı ve lokal çalışabilen bir çözüm kurmaktı. all-MiniLM-L6-v2 hafif bir model, CPU’da bile makul hızda çalışıyor ve ekstra API maliyeti gerektirmiyor. Biyomedikal özetler için semantik olarak yeterli performans veriyor. Daha domain-spesifik ve ağır modeller (örneğin BiomedBERT türevleri) bazı durumlarda daha iyi sonuç verebilir ama bu projede hız, sadelik ve kurulum kolaylığı benim için daha öncelikliydi. O yüzden bilinçli bir trade-off yaptım.
 
-## Neden all-MiniLM-L6-v2 embedding?
-- Lokal çalışıyor, ekstra API maliyeti yok.
-- Biomedikal metinler için yeterli performans veriyor.
-- Production ortamında daha spesifik bir biomedikal model (`BiomedNLP-BiomedBERT-base` vb.) tercih edilebilir; fakat bu görev için hız / maliyet dengesi açısından `all-MiniLM-L6-v2` daha mantıklıydı.
-
-## Phenotype vs variant ayrımını nasıl sağladım?
-- System prompt içinde modelden açıkça **phenotypes (klinik gözlemler)** ve **variants (moleküler mutasyonlar)** için ayrı satırlar/ifadeler kullanmasını istiyorum.
-- Cevap üretildikten sonra `validate_response` fonksiyonu:
-  - Regex ile tüm varyant adaylarını çekiyor (ör. `c.5A>G`, `p.Met1Thr` vb.).
-  - Bu varyantların gerçekten retrieve edilen kaynak chunk'larda geçip geçmediğini kontrol ediyor.
-  - Kaynakta olmayan her varyant için uyarı mesajı üretiyor (hallucination guardrail). Böylece modelin ürettiği iddia ikinci bir katmanla doğrulanmış oluyor.
+## 3. LLM’nin fenotip ile varyantı karıştırmamasını nasıl sağladım?
+Burada iki katmanlı bir yaklaşım kullandım.
+İlk olarak prompt seviyesinde, modelden fenotipleri (klinik gözlemler) ve varyantları (moleküler mutasyonlar) ayrı ayrı ve net biçimde ifade etmesini istiyorum. Yani ayrımı en baştan sistem mesajında tanımlıyorum.
+İkinci olarak, modelin ürettiği cevabı otomatik olarak kontrol eden bir validate_response fonksiyonum var. Regex ile metindeki varyant ifadelerini (örneğin c.5A>G, p.Met1Thr gibi) çıkarıyorum ve bunların gerçekten retrieve edilen kaynak chunk’larda geçip geçmediğini kontrol ediyorum. Eğer model kaynakta olmayan bir varyant uydurmuşsa bunu işaretliyorum.
+Yani sadece prompt’a güvenmiyorum; çıktı sonrası bir “hallucination guardrail” katmanı koyarak fenotip/varyant ayrımında modelin uydurma yapmasını teknik olarak da kontrol ediyorum.
 
 ## Mimari
 
@@ -73,4 +67,5 @@ PubMed (Entrez) + bioRxiv  -->  ingest.py  -->  ChromaDB (rars1_genomics)
 
 Bu proje, PubMed’den verileri dinamik olarak çekip anlamlı parçalara bölen, ChromaDB üzerinde vektör olarak indeksleyen ve RAG mimarisiyle cevap üreten bir Genomic-RAG uygulamasıdır. Üretilen cevaplar PMID/DOI referanslarıyla desteklenir ve halüsinasyonları azaltmak için özel güvenlik mekanizmaları içerir. Özellikle RARS1 geni üzerine odaklanarak güvenilir ve kaynaklı bilgi sunmayı amaçlar.
 #
+
 
