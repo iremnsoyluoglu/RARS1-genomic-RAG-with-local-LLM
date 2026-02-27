@@ -1,0 +1,6 @@
+.env
+chroma_db/
+raw_abstracts.json
+eval_results.json
+__pycache__/
+*.pyc
