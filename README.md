@@ -1,8 +1,8 @@
 # RARS1 Genomic-RAG
 
-RARS1 geni üzerine yayımlanan literatürü dinamik olarak çekip, lokal bir LLM ile soru-cevap yapabilen bir RAG sistemi. Statik bir PDF'e ya da önceden hazırlanmış bir veri setine dayanmıyor — her çalıştırmada PubMed ve bioRxiv'den güncel verileri alıyor.
-
-Odak noktası: fenotip, hastalık ve genetik varyantları birbirine karıştırmadan, her iddiayı bir PMID ya da DOI'ye bağlayarak sunmak.
+RARS1 geni üzerine yayımlanan literatürü dinamik olarak çekip lokal bir LLM ile soru-cevap yapabilen bir RAG sistemi. Önceden indirilmiş bir PDF'e ya da sabit bir veri setine dayanmıyor — her çalıştırmada PubMed ve bioRxiv'den güncel abstracts alınıyor, ChromaDB'ye yazılıyor ve sorular doğrudan bu veriler üzerinden yanıtlanıyor.
+Sistem üç temel sorunu çözecek şekilde tasarlandı: güncel veriye erişim, kaynak izlenebilirliği ve halüsinasyon kontrolü. PubMed'den gelen her abstract chunk'lara bölünürken varyant isimleri (c.5A>G, p.Met1Thr gibi) bozulmadan korunuyor. Her cevap yalnızca retrieve edilen chunk'lara dayanıyor ve sonunda mutlaka bir PMID ya da DOI listesi yer alıyor. Modelin ürettiği varyant isimleri ise ayrı bir fonksiyonla kaynaklarla karşılaştırılıyor — kaynakta geçmiyorsa işaretleniyor.
+Çıktı olarak fenotip, ilişkili hastalık ve rapor edilmiş varyantlar ayrı ayrı sunuluyor. Doğruluk ve izlenebilirlik, kapsam genişliğinin önünde tutuluyor.
 
 ---
 
@@ -125,6 +125,7 @@ Sources consulted: PMID: 38618971, PMID: 37186453, DOI: 10.1101/...
 ---
 
 > Tıp alanında "bilmiyorum" her zaman uydurulmuş bir varyanttan daha iyi bir cevaptır. Sistem bu anlayış üzerine kuruldu.
+
 
 
 
